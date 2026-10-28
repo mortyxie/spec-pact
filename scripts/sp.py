@@ -274,7 +274,9 @@ def parse_plan_steps(plan_path):
             continue
         doc = next((c for c in cells if "steps/" in c), None)
         title = cells[1] if len(cells) > 1 and cells[1] not in PHASES else ""
-        rows[cid] = {"phase": phase, "doc": doc, "title": title}
+        rest = [c for c in cells if c not in (cid, title, doc, phase) and c and c != "-"]
+        hint = max(rest, key=len) if rest else ""
+        rows[cid] = {"phase": phase, "doc": doc, "title": title, "hint": hint}
     return rows
 
 
@@ -319,7 +321,8 @@ def assess(step, cfg, did, last_did):
     return None, ""
 
 
-DID_LABEL = {"+1": "+1 推进", "0": "0 维持", "-1": "-1 回退", "wait": "wait 等用户", "-": "-"}
+PHASE_LABEL = {"draft": "尚未开始", "execute": "进行中", "verify": "验收中",
+               "blocked": "受阻", "done": "已完成"}
 
 
 def step_progress(root, sid):
@@ -332,38 +335,112 @@ def step_progress(root, sid):
     return sum(1 for d, _ in items if d), len(items)
 
 
+def step_goal(root, sid):
+    """取 step.md「## 目标」下第一段，压成一行——状态头的「下一轮」要说人话。"""
+    md = paths(Path(root))["steps"] / sid / "step.md"
+    if not md.exists():
+        return ""
+    lines = md.read_text(encoding="utf-8").splitlines()
+    try:
+        i = next(n for n, l in enumerate(lines) if l.strip().startswith("## 目标"))
+    except StopIteration:
+        return ""
+    buf = []
+    for l in lines[i + 1:]:
+        t = l.strip()
+        if t.startswith("#"):
+            break
+        if not t:
+            if buf:
+                break
+            continue
+        buf.append(t)
+    txt = " ".join(buf)
+    txt = re.sub(r"[。；]$", "", txt)
+    return txt[:90] + ("…" if len(txt) > 90 else "")
+
+
+def next_hint(root, st, ids, active):
+    """下一轮要做的事：本步没完就说还差什么，完了就指向下一步要做什么。"""
+    if not ids:
+        return "还没导入步骤：先在 plan.md 写「步骤总表」，再跑 `sp.sh plan --import`"
+    s = st["steps"].get(active, {})
+    title = s.get("title") or ""
+    if s.get("phase") != "done":
+        d, total = step_progress(root, active)
+        if total and d < total:
+            items = checklist(paths(Path(root))["steps"] / active / "step.md")
+            first_open = next((txt for ok, txt in items if not ok), "")
+            return "继续 %s「%s」：验收还差 %d 项，先做「%s」" % (
+                active, title, total - d, first_open[:50])
+        if total and d >= total:
+            return "本步验收已全过：跑 `sp.sh step %s --phase done` 收尾，再进下一步" % active
+        what = step_goal(root, active) or s.get("hint") or ""
+        return "继续 %s「%s」%s" % (active, title, ("：" + what) if what else "")
+    if active in ids and ids.index(active) + 1 < len(ids):
+        nxt = ids[ids.index(active) + 1]
+        ntitle = st["steps"][nxt].get("title") or ""
+        what = step_goal(root, nxt) or st["steps"][nxt].get("hint") or ""
+        for pre in (ntitle, nxt):
+            if pre and what.startswith(pre):
+                what = what[len(pre):].lstrip("：:，,· ")
+                break
+        return "进入 %s「%s」%s" % (nxt, ntitle, ("：" + what) if what else "")
+    return "%d 步已全部完成，可以 `sp.sh handoff` 交接或 `sp.sh archive` 冻结" % len(ids)
+
+
+def risk_sentence(risk, s, cfg):
+    """风险点用人话说，不甩代码名。"""
+    if not risk:
+        return "无"
+    w = cfg["watchdog"]
+    if risk == "stalled":
+        return "连续 %d 轮没有实际产出，大概率是方向或粒度不对——建议停下来换策略，或把这步拆小" % s.get("no_progress", 0)
+    if risk == "overrun":
+        return "这一步已经打了 %d 轮，超过上限 %d——通常说明这一步该拆开，而不是继续硬推" % (
+            s.get("turns", 0), w["max_turns_per_step"])
+    if risk == "backtrack":
+        return "本轮推翻了已定的东西，先确认影响面再往下走"
+    if risk == "backtrack-review":
+        return "连续两次回退，先停下来对齐目标，不要继续推进"
+    return risk
+
+
 def header(root, st, cfg, risk=None, advice=""):
-    """状态头：一行一字段，左标签右值。不要表格——表格要表头+分隔行，读起来更累。"""
+    """状态头：两列表格。四行讲清「在哪、上轮做了什么、下轮做什么、有什么风险」。"""
     steps = st["steps"]
     ids = sorted(steps.keys())
     active = st.get("active_step")
     idx = ids.index(active) + 1 if active in ids else 0
-    s = steps.get(active, {"phase": "-", "turns": 0, "title": ""})
+    s = steps.get(active, {"phase": "-", "turns": 0, "title": "", "no_progress": 0})
     title = (s.get("title") or "").strip()
-    step_line = "%s%s (%d/%d)" % (active or "none", (" " + title) if title else "", idx, len(ids))
     done_steps = sum(1 for c in ids if steps[c].get("phase") == "done")
     adone, atotal = step_progress(root, active)
-    max_turns = cfg["watchdog"]["max_turns_per_step"]
-    did_raw = st.get("last_round", {}).get("did", "-")
-    did = DID_LABEL.get(did_raw, did_raw)
+    last = st.get("last_round", {})
+    summary = (last.get("summary") or "").strip()
 
-    out("%s spec-pact · %s · 进度 %d/%d 步完成" % (
+    step_txt = "%s%s（第 %d 步 / 共 %d 步，%s）" % (
+        active or "未开始", ("「" + title + "」") if title else "", idx, len(ids),
+        PHASE_LABEL.get(s.get("phase"), s.get("phase", "-")))
+    last_txt = summary or ("（上一轮没写摘要）" if last.get("n") else "还没开始做")
+
+    out("%s spec-pact · %s · %d/%d 步完成" % (
         MARK_OK, st.get("task", "unnamed"), done_steps, len(ids)))
     out("")
-    out("步骤：%s" % step_line)
-    out("阶段：%s" % s.get("phase", "-"))
-    out("轮次：%d/%d" % (s.get("turns", 0), max_turns))
-    out("上轮：%s" % did)
-    out("验收：%s" % (("%d/%d" % (adone, atotal)) if atotal else "-"))
-    out("风险：%s" % (risk or "无"))
+    out("| 项 | 内容 |")
+    out("|---|---|")
+    out("| 步骤 | %s |" % step_txt)
+    out("| 上一轮做完的事 | %s |" % last_txt)
+    out("| 下一轮要做的事 | %s |" % next_hint(root, st, ids, active))
+    out("| 风险点 | %s |" % risk_sentence(risk, s, cfg))
     if VERBOSE_HEADER:
-        summary = st.get("last_round", {}).get("summary") or ""
-        out("摘要：%s" % (summary or "-"))
-        out("待同步：%s" % ("; ".join(st["pending_sync"]) if st.get("pending_sync") else "无"))
+        out("| 阶段 | %s |" % PHASE_LABEL.get(s.get("phase"), s.get("phase", "-")))
+        out("| 轮次 | %d/%d |" % (s.get("turns", 0), cfg["watchdog"]["max_turns_per_step"]))
+        out("| 验收 | %s |" % (("%d/%d" % (adone, atotal)) if atotal else "-"))
+        out("| 待同步 | %s |" % ("; ".join(st["pending_sync"]) if st.get("pending_sync") else "无"))
 
-    if risk:
-        out("%s %s: %s" % (MARK_WARN, risk, advice))
     if st.get("pending_sync") and not VERBOSE_HEADER:
+        out("")
         out("%s pending-sync: %s" % (MARK_WARN, "; ".join(st["pending_sync"])))
 
 
@@ -476,12 +553,15 @@ def cmd_plan_import(a):
         if cid not in st["steps"]:
             st["steps"][cid] = {"title": info.get("title") or "", "phase": info["phase"], "turns": 0,
                                 "no_progress": 0, "did_history": [], "accept": [],
+                                "hint": info.get("hint") or "",
                                 "frozen": False, "updated_at": now()}
             created.append(cid)
         else:
             st["steps"][cid]["phase"] = info["phase"]
-            if info.get("title") and not st["steps"][cid].get("title"):
-                st["steps"][cid]["title"] = info["title"]
+            if info.get("title"):
+                st["steps"][cid]["title"] = st["steps"][cid].get("title") or info["title"]
+            if info.get("hint"):
+                st["steps"][cid]["hint"] = info["hint"]
         d = p["steps"] / cid
         d.mkdir(parents=True, exist_ok=True)
         sm = d / "step.md"
