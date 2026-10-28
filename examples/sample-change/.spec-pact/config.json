@@ -1,0 +1,47 @@
+{
+  "schema_version": 2,
+  "dirs": [
+    "resource",
+    "work",
+    "output",
+    "log"
+  ],
+  "naming": {
+    "style_by_kind": {
+      "doc": "kebab_case",
+      "code": "snake_case",
+      "dir": "kebab_case",
+      "code_dir": "snake_case"
+    },
+    "doc_exts": [
+      ".md",
+      ".txt",
+      ".rst"
+    ],
+    "code_zones": [
+      "src",
+      "lib",
+      "tests",
+      "app",
+      "packages"
+    ],
+    "whitelist": [
+      "readme.md",
+      "license",
+      "skill.md",
+      "makefile",
+      "package.json",
+      "skill_meta.json",
+      "sp.py"
+    ],
+    "strict_existing": false
+  },
+  "watchdog": {
+    "stalled_turns": 3,
+    "max_turns_per_step": 12,
+    "backtrack_review": 2,
+    "tick_stale_minutes": 180
+  },
+  "max_depth": 3,
+  "steps_dir": "steps"
+}

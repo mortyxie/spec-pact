@@ -1,0 +1,8 @@
+# 统一换行：脚本被 Windows checkout 成 CRLF 会直接跑不起来
+* text=auto eol=lf
+*.sh  text eol=lf
+*.py  text eol=lf
+*.md  text eol=lf
+*.json text eol=lf
+*.cmd text eol=crlf
+*.bat text eol=crlf

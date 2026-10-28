@@ -1,0 +1,63 @@
+{
+  "schema_version": 2,
+  "root": "examples/sample-change",
+  "task": "把周报生成流程自动化",
+  "plan_version": 1,
+  "phase": "execute",
+  "active_step": "02-design",
+  "steps": {
+    "01-scope": {
+      "title": "范围确认",
+      "phase": "done",
+      "turns": 4,
+      "no_progress": 0,
+      "did_history": [
+        "+1",
+        "0",
+        "+1",
+        "+1"
+      ],
+      "accept": [],
+      "frozen": true,
+      "updated_at": "2026-10-28 20:40"
+    },
+    "02-design": {
+      "title": "方案设计",
+      "phase": "execute",
+      "turns": 2,
+      "no_progress": 0,
+      "did_history": [
+        "+1",
+        "0"
+      ],
+      "accept": [],
+      "frozen": false,
+      "updated_at": "2026-10-28 21:05"
+    },
+    "03-build": {
+      "title": "脚本实现",
+      "phase": "draft",
+      "turns": 0,
+      "no_progress": 0,
+      "did_history": [],
+      "accept": [],
+      "frozen": false,
+      "updated_at": "2026-10-28 21:05"
+    }
+  },
+  "counts": {
+    "decisions": 2,
+    "changes": 3,
+    "pending": 1,
+    "diff": 0
+  },
+  "last_round": {
+    "n": 6,
+    "did": "0",
+    "summary": "读 r01 对齐数据源字段"
+  },
+  "pending_sync": [],
+  "risk": null,
+  "updated_at": "2026-10-28 21:05",
+  "last_lint_issues": 0
+}
