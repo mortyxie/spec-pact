@@ -640,6 +640,12 @@ def cmd_sync(a):
         for b in bad:
             out("  " + b)
         sys.exit(2)
+    if a.ack and st.get("pending_sync"):
+        cleared = st["pending_sync"]
+        st["pending_sync"] = []
+        backup_state(root, p["state"])
+        write_json(p["state"], st)
+        out("ack · 已清空 pending_sync（%s）—— 确认主文档索引已手工同步" % ", ".join(cleared))
     out("ok sync · 三向一致 · %d steps" % len(st["steps"]))
 
 
@@ -962,7 +968,7 @@ def main():
     c = sub.add_parser("decision", parents=[common]); c.add_argument("--text", required=True); c.add_argument("--trigger"); c.add_argument("--step"); c.set_defaults(fn=cmd_decision)
     c = sub.add_parser("change", parents=[common]); c.add_argument("--text", required=True); c.add_argument("--step"); c.set_defaults(fn=cmd_change)
     c = sub.add_parser("accept", parents=[common]); c.add_argument("step"); c.add_argument("--item", type=int); c.set_defaults(fn=cmd_accept)
-    c = sub.add_parser("sync", parents=[common]); c.set_defaults(fn=cmd_sync)
+    c = sub.add_parser("sync", parents=[common]); c.add_argument("--ack", action="store_true"); c.set_defaults(fn=cmd_sync)
     c = sub.add_parser("lint", parents=[common]); c.add_argument("-v", "--verbose", action="store_true"); c.set_defaults(fn=cmd_lint)
     c = sub.add_parser("touch", parents=[common]); c.add_argument("path"); c.add_argument("--kind", choices=["resource", "work", "output"]); c.set_defaults(fn=cmd_touch)
     c = sub.add_parser("archive", parents=[common]); c.add_argument("step"); c.set_defaults(fn=cmd_archive)

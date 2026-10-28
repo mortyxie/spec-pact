@@ -3,7 +3,7 @@ name: spec-pact
 description: "多轮项目协作协议：任务拆成带验收标准的步骤，进度与关键决策由 Python 状态机 scripts/sp.py 保管；每轮回复顶部输出「步骤 / 阶段 / 轮次 / 风险」状态头，强制单根收口、外部只读、命名规范、主文档与分步文档三向一致。用户说 spec-pact，或进入多轮项目实施时启用。"
 license: MIT
 metadata:
-  version: "2.1.0"
+  version: "2.1.1"
 ---
 
 # spec-pact
@@ -90,6 +90,7 @@ sh scripts/sp.sh tick --did <上一轮动作> --summary "<一句话>"
 | 时机 | 动作 |
 |---|---|
 | 步骤进 verify | `sp.sh sync` + `sp.sh lint` |
+| 手工改过主文档索引 | `sp.sh sync --ack`（清 pending_sync 提醒） |
 | 步骤完成 | `sp.sh step <id> --phase done` → `sp.sh archive <id>`（**就地冻结，不改路径**） |
 | 交接 | `sp.sh handoff`（自包含包到 `output/handoff_<ts>/`） |
 

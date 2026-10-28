@@ -3,7 +3,7 @@
   "name": "spec-pact",
   "display_name": "spec-pact 协作契约",
   "description": "**规范驱动的多轮项目协作协议（v2）**\n- 任务拆成带验收标准的步骤，进度与关键决策由 Python 状态机 `scripts/sp.py` 保管，不依赖模型记忆，防幻觉与状态漂移。\n- 每轮回复顶部输出一行状态头（步骤 / 阶段 / 轮次 / 风险），并带 watchdog：连续无产出、超轮数、连续回退时强制停下。\n- 主文档 `plan.md` ↔ 步骤分文档 `steps/NN-slug/step.md` ↔ `state.json` 三向一致性机械校验，杜绝「文档说完成、状态说进行中」。\n- 单根收口：一切写入在工作区内，外部资料只登记只读引用不复制；命名按类型分派（文档 kebab、代码 snake），新建文件前由脚本前置校验越界与命名。\n- 决策 / 改动两级：决策即时落盘并写清「为什么」，改动只记 diff 摘要。\n- 运行环境契约：解释器分级复用（系统 → agent 托管 → 沙箱），依赖登记在用户级 registry，避免重复下载 Python 与重复安装依赖。\n- 入口为零依赖启动器 `scripts/sp.sh` / `sp.cmd`：自身不需要 python 即可运行，按「系统 → agent 托管 → 沙箱」阶梯找解释器，找不到返回 exit 6 并给三条出路，绝不自动重复下载 python。\n- 支持中断续接、就地冻结归档、自包含交接包。\n- 边界清晰：文档排版规范降级为可选适配器，具体 CLI 模板归各自 skill。",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "url": "https://skills.netease.com/skills/skill_08e91f5635de",
   "status": "installed",
   "installed_at": 1786328466859,

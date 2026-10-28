@@ -120,6 +120,7 @@ spec-pact/
 
 ## 版本记录
 
+- **2.1.1（2026-10-28）** `sync --ack`：三向一致后清空 `pending_sync` 提醒，避免决策记多了每轮都挂着同一条警告。
 - **2.1.0（2026-10-28）** 补齐启动地：新增 `scripts/sp.sh` / `sp.cmd` 零依赖启动器（PATH 坏掉也能跑出结论），解释器按 A-system → B-agent-managed → C-sandbox 阶梯探测，无可用 python 时 `exit 6` 并给三条出路，绝不自动下载；`init` 内置解释器体检并写出 `env.json`；依赖统一登记到用户级 registry。见 `protocol/bootstrap.md`。
 - **2.0.0（2026-10-28）** 重写。状态机从"文字约定"变成可执行程序；任务模型从单层 proposal 变成主文档 + 步骤分文档 + 三向校验；决策分级简化为两级；新增 watchdog 与运行环境契约；移除 POPO 硬耦合；归档改就地冻结。
 - **1.1.0（2026-08-10）** 修复快照路径双定义、diff 计数无持久化字段、Terminate 后 active 悬空。
