@@ -18,6 +18,21 @@
       ".txt",
       ".rst"
     ],
+    "asset_exts": [
+      ".pdf",
+      ".png",
+      ".jpg",
+      ".jpeg",
+      ".svg",
+      ".webp",
+      ".gif",
+      ".csv",
+      ".tsv",
+      ".xlsx",
+      ".docx",
+      ".pptx",
+      ".zip"
+    ],
     "code_zones": [
       "src",
       "lib",

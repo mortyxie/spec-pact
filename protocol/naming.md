@@ -77,3 +77,8 @@ python scripts/sp.py lint -v                                   # 全树扫描
 - 一切写入必须在 root 内。`touch` 用 `Path.resolve()` 判定，`../` 逃逸直接拒绝。
 - 外部资料**不复制进 root**，登记进 `.spec-pact/refs.md`（绝对路径 + 用途 + 校验值），只读访问。
 - 唯一允许写到 root 之外的位置：用户级 `~/.spec-pact/env.json`（跨项目依赖登记表）。
+
+## 素材类扩展名
+
+`asset_exts` 里列的扩展名（`.pdf` `.png` `.jpg` `.svg` `.csv` `.tsv` `.xlsx` `.docx` `.pptx` `.zip`）
+不是代码，按文档规则命名（kebab-case）。旧工作区升级后由 `load_config` 自动补齐该键，不用手改 `config.json`。

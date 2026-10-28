@@ -31,7 +31,11 @@ DEFAULT_CONFIG = {
         # 按类型分派：工程代码 snake_case，文档 kebab-case，目录 kebab-case
         "style_by_kind": {"doc": "kebab_case", "code": "snake_case",
                           "dir": "kebab_case", "code_dir": "snake_case"},
+        # 文档类：kebab-case
         "doc_exts": [".md", ".txt", ".rst"],
+        # 素材类：不是代码，也不该按代码规则命名（PDF 课件、图片、表格都是这种）
+        "asset_exts": [".pdf", ".png", ".jpg", ".jpeg", ".svg", ".webp", ".gif",
+                       ".csv", ".tsv", ".xlsx", ".docx", ".pptx", ".zip"],
         "code_zones": ["src", "lib", "tests", "app", "packages"],
         "whitelist": ["readme.md", "license", "skill.md", "makefile",
                       "package.json", "skill_meta.json", "sp.py"],
@@ -158,13 +162,29 @@ def load_state(root):
     return st
 
 
+def deep_merge(base, over):
+    """老 config 缺新键时补上默认值 —— 否则升级 sp.py 后旧工作区会 KeyError。"""
+    out = json.loads(json.dumps(base))
+    for k, v in (over or {}).items():
+        if isinstance(v, dict) and isinstance(out.get(k), dict):
+            out[k] = deep_merge(out[k], v)
+        else:
+            out[k] = v
+    return out
+
+
 def load_config(root):
     p = paths(root)
     cfg = read_json(p["config"], None)
     if cfg is None:
         cfg = json.loads(json.dumps(DEFAULT_CONFIG))
         write_json(p["config"], cfg)
-    return cfg
+        return cfg
+    # 与默认值合并：新版本加的键（如 asset_exts）在旧工作区也能生效
+    merged = deep_merge(DEFAULT_CONFIG, cfg)
+    if merged != cfg:
+        write_json(p["config"], merged)
+    return merged
 
 
 def logline(root, line):
@@ -189,7 +209,9 @@ def style_for(cfg, name, is_dir, rel_parts):
         first = rel_parts[0] if rel_parts else ""
         return sk["code_dir"] if first in n["code_zones"] else sk["dir"]
     ext = os.path.splitext(name)[1].lower()
-    return sk["doc"] if ext in n["doc_exts"] else sk["code"]
+    if ext in n["doc_exts"] or ext in n.get("asset_exts", ()):
+        return sk["doc"]        # 文档与素材都走 kebab-case
+    return sk["code"]
 
 
 def name_ok(name, cfg, is_dir=False, rel_parts=()):
