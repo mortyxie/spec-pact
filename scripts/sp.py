@@ -333,48 +333,33 @@ def step_progress(root, sid):
 
 
 def header(root, st, cfg, risk=None, advice=""):
+    """状态头：一行一字段，左标签右值。不要表格——表格要表头+分隔行，读起来更累。"""
     steps = st["steps"]
     ids = sorted(steps.keys())
     active = st.get("active_step")
     idx = ids.index(active) + 1 if active in ids else 0
     s = steps.get(active, {"phase": "-", "turns": 0, "title": ""})
     title = (s.get("title") or "").strip()
-    step_cell = "%s%s (%d/%d)" % (active or "none", (" " + title) if title else "", idx, len(ids))
+    step_line = "%s%s (%d/%d)" % (active or "none", (" " + title) if title else "", idx, len(ids))
     done_steps = sum(1 for c in ids if steps[c].get("phase") == "done")
     adone, atotal = step_progress(root, active)
     max_turns = cfg["watchdog"]["max_turns_per_step"]
     did_raw = st.get("last_round", {}).get("did", "-")
     did = DID_LABEL.get(did_raw, did_raw)
-    risk_cell = risk or "无"
 
     out("%s spec-pact · %s · 进度 %d/%d 步完成" % (
         MARK_OK, st.get("task", "unnamed"), done_steps, len(ids)))
-
+    out("")
+    out("步骤：%s" % step_line)
+    out("阶段：%s" % s.get("phase", "-"))
+    out("轮次：%d/%d" % (s.get("turns", 0), max_turns))
+    out("上轮：%s" % did)
+    out("验收：%s" % (("%d/%d" % (adone, atotal)) if atotal else "-"))
+    out("风险：%s" % (risk or "无"))
     if VERBOSE_HEADER:
-        rows = [
-            ("步骤", step_cell),
-            ("阶段", s.get("phase", "-")),
-            ("轮次", "%d/%d（余 %d）" % (s.get("turns", 0), max_turns,
-                                       max(0, max_turns - s.get("turns", 0)))),
-            ("上轮", "%s%s" % (did, (" · " + st["last_round"]["summary"])
-                              if st.get("last_round", {}).get("summary") else "")),
-            ("验收", "%d/%d%s" % (adone, atotal, (" · 未过 %d 项" % (atotal - adone))
-                                  if atotal and adone < atotal else "") if atotal else "-"),
-            ("风险", risk_cell),
-            ("待同步", "; ".join(st["pending_sync"]) if st.get("pending_sync") else "无"),
-        ]
-        out("")
-        out("| 项 | 值 |")
-        out("|:---|:---|")
-        for k, v in rows:
-            out("| %s | %s |" % (k, v))
-    else:
-        out("")
-        out("| 步骤 | 阶段 | 轮次 | 上轮 | 验收 | 风险 |")
-        out("|:---|:---|--:|:--|--:|:--|")
-        out("| %s | %s | %d/%d | %s | %s | %s |" % (
-            step_cell, s.get("phase", "-"), s.get("turns", 0), max_turns, did,
-            ("%d/%d" % (adone, atotal)) if atotal else "-", risk_cell))
+        summary = st.get("last_round", {}).get("summary") or ""
+        out("摘要：%s" % (summary or "-"))
+        out("待同步：%s" % ("; ".join(st["pending_sync"]) if st.get("pending_sync") else "无"))
 
     if risk:
         out("%s %s: %s" % (MARK_WARN, risk, advice))
@@ -585,6 +570,38 @@ def cmd_status(a):
                 cid, s["phase"], s["turns"], s["no_progress"],
                 ("%d/%d" % (d, t)) if t else "-",
                 "frozen" if s.get("frozen") else ""))
+
+
+def cmd_resume(a):
+    """新开一个会话时的单次调用：状态头 + 环境 + 距上次多久（防漏 tick）。"""
+    global VERBOSE_HEADER
+    VERBOSE_HEADER = True
+    root = require_root(a.root)
+    p = paths(root)
+    cfg = load_config(root)
+    st = load_state(root)
+    header(root, st, cfg, st.get("risk") if st.get("risk") not in (None, "none") else None,
+           "上次判定的风险未清除")
+    env = read_json(p["spec"] / "env.json", None)
+    out("")
+    cur_tier = python_tier(sys.executable)
+    if env:
+        r = env.get("running", {})
+        out("环境：python %s [%s]（登记 %s）" % (r.get("version", "?"), r.get("tier", "?"),
+                                          (env.get("detected_at") or "?")[:16]))
+    else:
+        out("环境：未登记（跑一次 sp.sh env）")
+    out("当前：python %s [%s]" % ("%d.%d.%d" % sys.version_info[:3], cur_tier))
+    if cur_tier == "C-sandbox":
+        out("! 当前解释器在沙箱临时目录，不要用它装依赖")
+    try:
+        delta = (datetime.now() - datetime.strptime(st["updated_at"], "%Y-%m-%d %H:%M")).total_seconds() / 60
+        if delta > cfg["watchdog"]["tick_stale_minutes"]:
+            out("! 距上次 tick 已 %d 分钟：中间可能有未被记录的回合，轮次与验收以实际为准" % delta)
+        else:
+            out("上次：%d 分钟前" % delta if delta >= 1 else "上次：刚刚")
+    except Exception:
+        pass
 
 
 def cmd_step(a):
@@ -1024,6 +1041,7 @@ def main():
     c.add_argument("-v", "--verbose", action="store_true", help="状态头用竖表（含待同步 / 未过项）")
     c.set_defaults(fn=cmd_tick)
     c = sub.add_parser("status", parents=[common]); c.add_argument("-v", "--verbose", action="store_true"); c.set_defaults(fn=cmd_status)
+    c = sub.add_parser("resume", parents=[common]); c.set_defaults(fn=cmd_resume)
     c = sub.add_parser("step", parents=[common]); c.add_argument("step"); c.add_argument("--phase"); c.add_argument("--title"); c.set_defaults(fn=cmd_step)
     c = sub.add_parser("decision", parents=[common]); c.add_argument("--text", required=True); c.add_argument("--trigger"); c.add_argument("--step"); c.set_defaults(fn=cmd_decision)
     c = sub.add_parser("change", parents=[common]); c.add_argument("--text", required=True); c.add_argument("--step"); c.set_defaults(fn=cmd_change)
