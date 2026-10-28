@@ -8,5 +8,6 @@
   "status": "installed",
   "installed_at": 1786328466859,
   "updated_at": 1793181600000,
-  "creator": "xiesongqi"
+  "creator": "xiesongqi",
+  "repository": "https://github.com/mortyxie/spec-pact"
 }
