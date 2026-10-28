@@ -3,7 +3,7 @@ name: spec-pact
 description: "多轮项目协作协议：任务拆成带验收标准的步骤，进度与关键决策由 Python 状态机 scripts/sp.py 保管；每轮回复顶部输出「步骤 / 阶段 / 轮次 / 风险」状态头，强制单根收口、外部只读、命名规范、主文档与分步文档三向一致。用户说 spec-pact，或进入多轮项目实施时启用。"
 license: MIT
 metadata:
-  version: "2.1.1"
+  version: "2.2.0"
 ---
 
 # spec-pact
@@ -42,7 +42,17 @@ sh scripts/sp.sh tick --did <上一轮动作> --summary "<一句话>"
 | `-1` | 回退：推翻已锁定决策 / 重做 / 撤销写入 |
 | `wait` | 等用户输入（不计入停滞） |
 
-- 状态头形如 `▸ spec-pact · 步骤 01-scope (1/5) · execute · 轮 3/12 · 上轮 +1 · 风险 无`
+- 状态头是**表格**，脚本直接输出，原样贴到回复顶部（不要改写成一行）：
+
+```
+▸ spec-pact · <任务名> · 进度 1/9 步完成
+
+| 步骤 | 阶段 | 轮次 | 上轮 | 验收 | 风险 |
+|:---|:---|--:|:--|--:|:--|
+| 01-name 定名与边界 (1/9) | execute | 3/12 | +1 推进 | 2/5 | 无 |
+```
+
+- 加 `-v` 换成竖表（含上轮摘要、未过项、待同步）：`tick --did +1 -v`；需要全步骤总览时用 `status -v`
 - **退出码 4**（stalled / overrun / backtrack-review）→ 必须停下处理，不得继续推进
 - **退出码 6**（无可用 python）→ 按 `protocol/bootstrap.md` 走三条出路，**不得私自下载 python**
 

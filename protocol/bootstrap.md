@@ -95,7 +95,15 @@ ok init · root=/work/quarterly · task=季度复盘
 
 真的没有 python、也装不了时，协议**不假装还能机检**：
 
-- 状态头前缀写 `degraded`：`▸ spec-pact[degraded] · 步骤 02-design · execute · 轮 3 · 风险 未知`
+- 状态头仍用表格，但首行标 degraded，且**必须写明「未经机器校验」**：
+
+```
+▸ spec-pact[degraded] · <任务名> · 进度 ?/? 步完成 · 未经机器校验
+
+| 步骤 | 阶段 | 轮次 | 上轮 | 验收 | 风险 |
+|:---|:---|--:|:--|--:|:--|
+| 02-design 方案设计 (?) | execute | ?/? | ? | ? | 未知（degraded） |
+```
 - 第一条要在 `decisions.md` 记：`D-000 进入手动模式，原因 <...>`，并写明恢复条件
 - `state.json` 允许人工编辑，但**不得声称经过 `sync` 校验**；跨步骤推进前必须人工核对 plan.md / step.md 两处
 - 手动模式只应作为过渡，超过 2 个步骤没恢复 → 停下来向用户报告，不要硬撑

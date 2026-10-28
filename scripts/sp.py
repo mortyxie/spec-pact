@@ -49,6 +49,7 @@ DEFAULT_CONFIG = {
 
 MARK_OK = "\u25b8"
 MARK_WARN = "!"
+VERBOSE_HEADER = False  # -v：状态头由「一行横表」变为「竖表」，附待同步与未过项
 
 try:
     sys.stdout.reconfigure(encoding="utf-8")
@@ -272,7 +273,8 @@ def parse_plan_steps(plan_path):
         if phase is None:
             continue
         doc = next((c for c in cells if "steps/" in c), None)
-        rows[cid] = {"phase": phase, "doc": doc}
+        title = cells[1] if len(cells) > 1 and cells[1] not in PHASES else ""
+        rows[cid] = {"phase": phase, "doc": doc, "title": title}
     return rows
 
 
@@ -317,20 +319,66 @@ def assess(step, cfg, did, last_did):
     return None, ""
 
 
+DID_LABEL = {"+1": "+1 推进", "0": "0 维持", "-1": "-1 回退", "wait": "wait 等用户", "-": "-"}
+
+
+def step_progress(root, sid):
+    """验收进度：读 step.md 的 checkbox，返回 (done, total) 或 (None, None)。"""
+    if not sid:
+        return None, None
+    items = checklist(paths(Path(root))["steps"] / sid / "step.md")
+    if not items:
+        return None, None
+    return sum(1 for d, _ in items if d), len(items)
+
+
 def header(root, st, cfg, risk=None, advice=""):
     steps = st["steps"]
     ids = sorted(steps.keys())
     active = st.get("active_step")
     idx = ids.index(active) + 1 if active in ids else 0
-    s = steps.get(active, {"phase": "-", "turns": 0})
-    line = "%s spec-pact · 步骤 %s (%d/%d) · %s · 轮 %d/%d · 上轮 %s · 风险 %s" % (
-        MARK_OK, active or "none", idx, len(ids), s.get("phase", "-"),
-        s.get("turns", 0), cfg["watchdog"]["max_turns_per_step"],
-        st.get("last_round", {}).get("did", "-"), risk or "无")
-    out(line)
+    s = steps.get(active, {"phase": "-", "turns": 0, "title": ""})
+    title = (s.get("title") or "").strip()
+    step_cell = "%s%s (%d/%d)" % (active or "none", (" " + title) if title else "", idx, len(ids))
+    done_steps = sum(1 for c in ids if steps[c].get("phase") == "done")
+    adone, atotal = step_progress(root, active)
+    max_turns = cfg["watchdog"]["max_turns_per_step"]
+    did_raw = st.get("last_round", {}).get("did", "-")
+    did = DID_LABEL.get(did_raw, did_raw)
+    risk_cell = risk or "无"
+
+    out("%s spec-pact · %s · 进度 %d/%d 步完成" % (
+        MARK_OK, st.get("task", "unnamed"), done_steps, len(ids)))
+
+    if VERBOSE_HEADER:
+        rows = [
+            ("步骤", step_cell),
+            ("阶段", s.get("phase", "-")),
+            ("轮次", "%d/%d（余 %d）" % (s.get("turns", 0), max_turns,
+                                       max(0, max_turns - s.get("turns", 0)))),
+            ("上轮", "%s%s" % (did, (" · " + st["last_round"]["summary"])
+                              if st.get("last_round", {}).get("summary") else "")),
+            ("验收", "%d/%d%s" % (adone, atotal, (" · 未过 %d 项" % (atotal - adone))
+                                  if atotal and adone < atotal else "") if atotal else "-"),
+            ("风险", risk_cell),
+            ("待同步", "; ".join(st["pending_sync"]) if st.get("pending_sync") else "无"),
+        ]
+        out("")
+        out("| 项 | 值 |")
+        out("|:---|:---|")
+        for k, v in rows:
+            out("| %s | %s |" % (k, v))
+    else:
+        out("")
+        out("| 步骤 | 阶段 | 轮次 | 上轮 | 验收 | 风险 |")
+        out("|:---|:---|--:|:--|--:|:--|")
+        out("| %s | %s | %d/%d | %s | %s | %s |" % (
+            step_cell, s.get("phase", "-"), s.get("turns", 0), max_turns, did,
+            ("%d/%d" % (adone, atotal)) if atotal else "-", risk_cell))
+
     if risk:
         out("%s %s: %s" % (MARK_WARN, risk, advice))
-    if st.get("pending_sync"):
+    if st.get("pending_sync") and not VERBOSE_HEADER:
         out("%s pending-sync: %s" % (MARK_WARN, "; ".join(st["pending_sync"])))
 
 
@@ -441,12 +489,14 @@ def cmd_plan_import(a):
     created = []
     for cid, info in rows.items():
         if cid not in st["steps"]:
-            st["steps"][cid] = {"title": "", "phase": info["phase"], "turns": 0,
+            st["steps"][cid] = {"title": info.get("title") or "", "phase": info["phase"], "turns": 0,
                                 "no_progress": 0, "did_history": [], "accept": [],
                                 "frozen": False, "updated_at": now()}
             created.append(cid)
         else:
             st["steps"][cid]["phase"] = info["phase"]
+            if info.get("title") and not st["steps"][cid].get("title"):
+                st["steps"][cid]["title"] = info["title"]
         d = p["steps"] / cid
         d.mkdir(parents=True, exist_ok=True)
         sm = d / "step.md"
@@ -465,6 +515,8 @@ def cmd_plan_import(a):
 
 
 def cmd_tick(a):
+    global VERBOSE_HEADER
+    VERBOSE_HEADER = bool(getattr(a, "verbose", False))
     root = require_root(a.root)
     p = paths(root)
     cfg = load_config(root)
@@ -515,16 +567,23 @@ def cmd_tick(a):
 
 
 def cmd_status(a):
+    global VERBOSE_HEADER
+    VERBOSE_HEADER = bool(a.verbose)
     root = require_root(a.root)
     cfg = load_config(root)
     st = load_state(root)
     header(root, st, cfg, st.get("risk") if st.get("risk") != "none" else None,
            "上次判定的风险未清除")
     if a.verbose:
+        out("")
+        out("| 步骤 | 阶段 | 轮次 | 停滞 | 验收 | 状态 |")
+        out("|:---|:---|--:|--:|--:|:---|")
         for cid in sorted(st["steps"]):
             s = st["steps"][cid]
-            out("  %-12s %-8s turns=%-3d stall=%-2d %s" % (
+            d, t = step_progress(root, cid)
+            out("| %s | %s | %d | %d | %s | %s |" % (
                 cid, s["phase"], s["turns"], s["no_progress"],
+                ("%d/%d" % (d, t)) if t else "-",
                 "frozen" if s.get("frozen") else ""))
 
 
@@ -962,6 +1021,7 @@ def main():
     c.add_argument("--summary", default="")
     c.add_argument("--step", help="同时切换 active step")
     c.add_argument("--json", dest="json_out", action="store_true")
+    c.add_argument("-v", "--verbose", action="store_true", help="状态头用竖表（含待同步 / 未过项）")
     c.set_defaults(fn=cmd_tick)
     c = sub.add_parser("status", parents=[common]); c.add_argument("-v", "--verbose", action="store_true"); c.set_defaults(fn=cmd_status)
     c = sub.add_parser("step", parents=[common]); c.add_argument("step"); c.add_argument("--phase"); c.add_argument("--title"); c.set_defaults(fn=cmd_step)
